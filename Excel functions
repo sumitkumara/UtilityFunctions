@@ -1,0 +1,2 @@
+ Excel formula to extract the 10-digit number from a cell:
+=TEXTJOIN("", TRUE, IFERROR(MID(A1, ROW(INDIRECT("1:" & LEN(A1)-9)), 10) * ISNUMBER(--MID(A1, ROW(INDIRECT("1:" & LEN(A1)-9)), 10)) * (LEN(MID(A1, ROW(INDIRECT("1:" & LEN(A1)-9)), 10))=10), ""))
