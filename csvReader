@@ -1,0 +1,122 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using System.Linq;
+using CsvHelper;
+using CsvHelper.Configuration;
+
+class Program
+{
+    static void Main(string[] args)
+    {
+        string inputCsvFilePath = "input.csv"; // Path to your CSV file
+        string outputPolicyNumbersFilePath = "outputPolicyNumbers.txt"; // Output for policy numbers
+        string inputPoliciesFilePath = "inputPolicies.txt"; // Input text file with policy numbers
+        string outputIdsFilePath = "outputIds.txt"; // Output for IDs
+
+        try
+        {
+            // Task 1: Extract policy numbers and write to a text file
+            ExtractPolicyNumbers(inputCsvFilePath, outputPolicyNumbersFilePath);
+
+            // Task 2: Find IDs of given policy numbers
+            FindIdsForPolicies(inputCsvFilePath, inputPoliciesFilePath, outputIdsFilePath);
+
+            Console.WriteLine("Processing completed successfully!");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Error: " + ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Reads the CSV file and writes all valid policy numbers to a text file.
+    /// </summary>
+    static void ExtractPolicyNumbers(string csvFilePath, string outputFilePath)
+    {
+        var policyNumbers = new List<string>();
+
+        using (var reader = new StreamReader(csvFilePath))
+        using (var csv = new CsvReader(reader, new CsvConfiguration(CultureInfo.InvariantCulture)
+        {
+            IgnoreBlankLines = true,
+            HeaderValidated = null, // Ignore missing headers
+            MissingFieldFound = null // Ignore missing fields
+        }))
+        {
+            var records = csv.GetRecords<dynamic>();
+
+            foreach (var record in records)
+            {
+                var policyValue = GetColumnValue(record, "Associate Policy or RetentionNumber");
+
+                if (decimal.TryParse(policyValue, out _))
+                {
+                    policyNumbers.Add(policyValue);
+                }
+            }
+        }
+
+        File.WriteAllText(outputFilePath, string.Join(",", policyNumbers));
+        Console.WriteLine("Policy numbers written to: " + outputFilePath);
+    }
+
+    /// <summary>
+    /// Reads a text file containing policy numbers and finds corresponding IDs from the CSV.
+    /// </summary>
+    static void FindIdsForPolicies(string csvFilePath, string policiesFilePath, string outputFilePath)
+    {
+        // Load policy numbers from input file
+        var policyNumbers = File.ReadAllLines(policiesFilePath).Select(p => p.Trim()).ToHashSet();
+
+        var matchingIds = new List<string>();
+
+        using (var reader = new StreamReader(csvFilePath))
+        using (var csv = new CsvReader(reader, new CsvConfiguration(CultureInfo.InvariantCulture)
+        {
+            IgnoreBlankLines = true,
+            HeaderValidated = null,
+            MissingFieldFound = null
+        }))
+        {
+            var records = csv.GetRecords<dynamic>();
+
+            foreach (var record in records)
+            {
+                var idValue = GetColumnValue(record, "ID");
+                var policyValue = GetColumnValue(record, "Associate Policy or RetentionNumber");
+
+                // Check if policy is numeric and matches the input policies
+                if (policyNumbers.Contains(policyValue))
+                {
+                    matchingIds.Add(idValue);
+                }
+            }
+        }
+
+        File.WriteAllText(outputFilePath, string.Join(Environment.NewLine, matchingIds));
+        Console.WriteLine("IDs of policies written to: " + outputFilePath);
+    }
+
+    /// <summary>
+    /// Safely gets the value of a column from a dynamic record.
+    /// </summary>
+    static string GetColumnValue(dynamic record, string columnName)
+    {
+        try
+        {
+            var dictionary = (IDictionary<string, object>)record;
+            if (dictionary.ContainsKey(columnName))
+            {
+                return dictionary[columnName]?.ToString() ?? string.Empty;
+            }
+        }
+        catch
+        {
+            // Ignore errors during column extraction
+        }
+        return string.Empty;
+    }
+}
