@@ -1,10 +1,7 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
 using System.Linq;
-using CsvHelper;
-using CsvHelper.Configuration;
 
 class Program
 {
@@ -36,23 +33,27 @@ class Program
     /// </summary>
     static void ExtractPolicyNumbers(string csvFilePath, string outputFilePath)
     {
-        var policyNumbers = new List<string>();
-
+        var policyNumbers = new HashSet<string>();
         using (var reader = new StreamReader(csvFilePath))
-        using (var csv = new CsvReader(reader, new CsvConfiguration(CultureInfo.InvariantCulture)
         {
-            IgnoreBlankLines = true,
-            HeaderValidated = null, // Ignore missing headers
-            MissingFieldFound = null // Ignore missing fields
-        }))
-        {
-            var records = csv.GetRecords<dynamic>();
+            string headerLine = reader.ReadLine(); // Read header line
+            if (headerLine == null) throw new Exception("CSV file is empty.");
 
-            foreach (var record in records)
+            string[] headers = ParseCsvLine(headerLine);
+            int policyIndex = Array.IndexOf(headers, "Associate Policy or RetentionNumber");
+
+            if (policyIndex == -1) throw new Exception("Required column not found in CSV.");
+
+            while (!reader.EndOfStream)
             {
-                var policyValue = GetColumnValue(record, "Associate Policy or RetentionNumber");
+                string line = reader.ReadLine();
+                if (string.IsNullOrWhiteSpace(line)) continue;
 
-                if (decimal.TryParse(policyValue, out _))
+                string[] fields = ParseCsvLine(line);
+                if (policyIndex >= fields.Length) continue;
+
+                string policyValue = fields[policyIndex].Trim();
+                if (decimal.TryParse(policyValue, out _)) // Check if it's numeric
                 {
                     policyNumbers.Add(policyValue);
                 }
@@ -69,26 +70,33 @@ class Program
     static void FindIdsForPolicies(string csvFilePath, string policiesFilePath, string outputFilePath)
     {
         // Load policy numbers from input file
-        var policyNumbers = File.ReadAllLines(policiesFilePath).Select(p => p.Trim()).ToHashSet();
+        var policyNumbers = new HashSet<string>(File.ReadAllLines(policiesFilePath).Select(p => p.Trim()));
 
         var matchingIds = new List<string>();
 
         using (var reader = new StreamReader(csvFilePath))
-        using (var csv = new CsvReader(reader, new CsvConfiguration(CultureInfo.InvariantCulture)
         {
-            IgnoreBlankLines = true,
-            HeaderValidated = null,
-            MissingFieldFound = null
-        }))
-        {
-            var records = csv.GetRecords<dynamic>();
+            string headerLine = reader.ReadLine(); // Read header line
+            if (headerLine == null) throw new Exception("CSV file is empty.");
 
-            foreach (var record in records)
+            string[] headers = ParseCsvLine(headerLine);
+            int idIndex = Array.IndexOf(headers, "ID");
+            int policyIndex = Array.IndexOf(headers, "Associate Policy or RetentionNumber");
+
+            if (idIndex == -1 || policyIndex == -1)
+                throw new Exception("Required columns not found in CSV.");
+
+            while (!reader.EndOfStream)
             {
-                var idValue = GetColumnValue(record, "ID");
-                var policyValue = GetColumnValue(record, "Associate Policy or RetentionNumber");
+                string line = reader.ReadLine();
+                if (string.IsNullOrWhiteSpace(line)) continue;
 
-                // Check if policy is numeric and matches the input policies
+                string[] fields = ParseCsvLine(line);
+                if (idIndex >= fields.Length || policyIndex >= fields.Length) continue;
+
+                string idValue = fields[idIndex].Trim();
+                string policyValue = fields[policyIndex].Trim();
+
                 if (policyNumbers.Contains(policyValue))
                 {
                     matchingIds.Add(idValue);
@@ -101,22 +109,32 @@ class Program
     }
 
     /// <summary>
-    /// Safely gets the value of a column from a dynamic record.
+    /// Parses a CSV line considering basic escaping for commas within quotes.
     /// </summary>
-    static string GetColumnValue(dynamic record, string columnName)
+    static string[] ParseCsvLine(string line)
     {
-        try
+        var result = new List<string>();
+        bool insideQuotes = false;
+        var currentField = new List<char>();
+
+        foreach (char c in line)
         {
-            var dictionary = (IDictionary<string, object>)record;
-            if (dictionary.ContainsKey(columnName))
+            if (c == ',' && !insideQuotes)
             {
-                return dictionary[columnName]?.ToString() ?? string.Empty;
+                result.Add(new string(currentField.ToArray()));
+                currentField.Clear();
+            }
+            else if (c == '"')
+            {
+                insideQuotes = !insideQuotes;
+            }
+            else
+            {
+                currentField.Add(c);
             }
         }
-        catch
-        {
-            // Ignore errors during column extraction
-        }
-        return string.Empty;
+
+        result.Add(new string(currentField.ToArray())); // Add the last field
+        return result.ToArray();
     }
 }
