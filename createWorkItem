@@ -1,0 +1,60 @@
+using System;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Text;
+using Newtonsoft.Json;
+
+class Program
+{
+    static async System.Threading.Tasks.Task Main(string[] args)
+    {
+        string organization = "your-organization"; // Replace with your Azure DevOps organization
+        string project = "your-project";           // Replace with your Azure DevOps project
+        string workItemType = "Task";             // Replace with your desired work item type (e.g., Bug, Task, etc.)
+        string patToken = "your-pat-token";       // Replace with your PAT token
+
+        string url = $"https://dev.azure.com/{organization}/{project}/_apis/wit/workitems/${workItemType}?api-version=7.0";
+
+        using (HttpClient client = new HttpClient())
+        {
+            // Set authentication
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", 
+                Convert.ToBase64String(Encoding.ASCII.GetBytes($":{patToken}")));
+
+            // Create JSON body for the work item
+            var body = new[]
+            {
+                new
+                {
+                    op = "add",
+                    path = "/fields/System.Title",
+                    value = "Sample Work Item Title"
+                },
+                new
+                {
+                    op = "add",
+                    path = "/fields/System.Description",
+                    value = "This is a description of the work item."
+                }
+            };
+
+            var content = new StringContent(JsonConvert.SerializeObject(body), Encoding.UTF8, "application/json-patch+json");
+
+            // Make the POST request
+            HttpResponseMessage response = await client.PostAsync(url, content);
+
+            if (response.IsSuccessStatusCode)
+            {
+                Console.WriteLine("Work item created successfully!");
+                string responseBody = await response.Content.ReadAsStringAsync();
+                Console.WriteLine(responseBody);
+            }
+            else
+            {
+                Console.WriteLine($"Error: {response.StatusCode}");
+                string error = await response.Content.ReadAsStringAsync();
+                Console.WriteLine(error);
+            }
+        }
+    }
+}
