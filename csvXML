@@ -1,0 +1,61 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text;
+using System.Xml.Linq;
+
+class Program
+{
+    static void Main()
+    {
+        string csvFilePath = "input.csv"; // Change this to your CSV file path
+        int batchSize = 100; // Adjust as needed
+        List<string[]> csvData = ReadCsv(csvFilePath);
+        WriteXmlFiles(csvData, batchSize);
+    }
+
+    static List<string[]> ReadCsv(string filePath)
+    {
+        var lines = new List<string[]>();
+        using (var reader = new StreamReader(filePath))
+        {
+            while (!reader.EndOfStream)
+            {
+                string line = reader.ReadLine();
+                if (!string.IsNullOrWhiteSpace(line))
+                {
+                    lines.Add(line.Split(",")); // Assuming CSV is comma-separated
+                }
+            }
+        }
+        return lines.Skip(1).ToList(); // Skip header row
+    }
+
+    static void WriteXmlFiles(List<string[]> data, int batchSize)
+    {
+        int fileIndex = 1;
+        for (int i = 0; i < data.Count; i += batchSize)
+        {
+            var batch = data.Skip(i).Take(batchSize);
+            XDocument xmlDoc = new XDocument(
+                new XElement("dataFixRecords",
+                    batch.Select(row =>
+                        new XElement("dataFixRecord",
+                            new XElement("PolicyNumber", row[0]),
+                            new XElement("CurrentTermEffectiveDate", row[3]),
+                            new XElement("CurrentAnnInd", row[6] == "" ? "No" : row[6]),
+                            new XElement("AllowNextTermUpdate", "Y"),
+                            new XElement("FutureTermEffectiveDate", row[4]),
+                            new XElement("FutureAnnInd", row[6] == "" ? "No" : row[6])
+                        )
+                    )
+                )
+            );
+            string fileName = $"output_{fileIndex}.txt";
+            File.WriteAllText(fileName, xmlDoc.ToString(), Encoding.UTF8);
+            Console.WriteLine($"Written: {fileName}");
+            fileIndex++;
+        }
+    }
+}
